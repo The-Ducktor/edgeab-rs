@@ -38,7 +38,7 @@ pub fn make_file(input_epub: &str, output_path: &str) -> io::Result<()> {
     };
 
     // Define phrases to filter out
-    let filter_phrases = vec!["copyright", "landmarks", "table of contents"];
+    let filter_phrases = vec!["copyright", "landmarks", "table of contents", "illustration"];
 
     // Function to check if a title should be filtered out
     fn should_filter(title: &str, filter_phrases: &[&str]) -> bool {

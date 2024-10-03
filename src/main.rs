@@ -179,8 +179,18 @@ async fn make_book(book_path: &str, opf_file: &str, cover: &str) {
     let mut chapter_lengths = Vec::new();
 
     let mut book = Book::new();
-    for i in 0..min_length {
-        book.add_chapter(&titles[i], chapters[i].clone());
+    if chapters[0][0].starts_with("Title: ") {
+        // make work with python generated files
+        println!("{}","using Python generated style file".yellow()); // informative
+        for i in 1..min_length {
+            
+            book.add_chapter(&titles[i], chapters[i].clone());
+        }
+    } else {
+        for i in 0..min_length {
+            // work with rust generated files
+            book.add_chapter(&titles[i], chapters[i].clone());
+        }
     }
 
     for (chapter_number, (_, content)) in book.get_all_chapters().iter().enumerate() {
@@ -255,12 +265,11 @@ struct Args {
 async fn main() {
     fs::create_dir_all(AUDIO_OUTPUT_DIR).ok();
     let args = Args::parse();
-    
 
     let file_path = args.file;
     let opf_file = args.opf.unwrap_or_else(|| "none.opf".to_string()); // Use a default or handle None case
     let cover = args.cover.unwrap_or_else(|| "none.img".to_string());
-    println!("file: {}, opf: {}, cover: {}", file_path,opf_file, cover);
+    println!("file: {}, opf: {}, cover: {}", file_path, opf_file, cover);
 
     if file_path.ends_with(".txt") {
         if opf_file != "none.opf" {
@@ -282,4 +291,3 @@ async fn main() {
     }
     fs::remove_dir_all(AUDIO_OUTPUT_DIR).ok();
 }
-// Call the read_book function with the book_path
