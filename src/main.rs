@@ -15,7 +15,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use tokio::task;
 
-const AUDIO_OUTPUT_DIR: &str = "./tmp"; // Set the output directory
+const AUDIO_OUTPUT_DIR: &str = "./tmp"; // Set the output / temp directory
 
 async fn read_chapter(chapter_number: usize, texts: Vec<String>) {
     if texts.len() < 2 {
@@ -233,7 +233,6 @@ async fn make_book(book_path: &str, opf_file: &str, cover: &str) {
         println!("Trying to remove file");
         fs::remove_file(file).ok();
     }
-    
 
     let metadata_map = metdata::get_metadata(opf_file);
     metdata::add_metadata(&output_file, &metadata_map, &cover);
@@ -256,21 +255,29 @@ struct Args {
 async fn main() {
     fs::create_dir_all(AUDIO_OUTPUT_DIR).ok();
     let args = Args::parse();
-    println!("{}", args.file);
+    
 
     let file_path = args.file;
-    let opf_file = args.opf.unwrap_or_else(|| "default.opf".to_string()); // Use a default or handle None case
+    let opf_file = args.opf.unwrap_or_else(|| "none.opf".to_string()); // Use a default or handle None case
     let cover = args.cover.unwrap_or_else(|| "none.img".to_string());
+    println!("file: {}, opf: {}, cover: {}", file_path,opf_file, cover);
 
     if file_path.ends_with(".txt") {
-        if opf_file != "default.opf"  {
+        if opf_file != "none.opf" {
+            if cover == "none.img" {
+                println!("{}", "no cover image provided".yellow())
+            }
             make_book(&file_path, &opf_file, &cover).await;
         } else {
-            println!("Missing OPF")
+            let message = "Missing OPF file";
+            println!("{}", message.red())
         }
         // If opf is None, you can provide some default logic for handling
     } else if file_path.ends_with(".epub") {
-        println!("Creating Intermediate File You can edit this");
+        println!(
+            "{}",
+            "Creating Intermediate File You can edit this".yellow()
+        );
         epub::make_file(&file_path, "book.txt").ok();
     }
     fs::remove_dir_all(AUDIO_OUTPUT_DIR).ok();
