@@ -5,6 +5,8 @@ use scraper::{Html, Selector};
 use std::fs::File;
 use std::io::{self, Write};
 
+
+
 /// Function to extract chapter previews from an EPUB file and write them to an output file.
 /// Filters out chapters with titles containing unwanted phrases.
 pub fn make_file(input_epub: &str, output_path: &str) -> io::Result<()> {
@@ -13,7 +15,10 @@ pub fn make_file(input_epub: &str, output_path: &str) -> io::Result<()> {
         Ok(epub) => epub,
         Err(e) => {
             eprintln!("Failed to open EPUB file: {}", e);
-            return Err(io::Error::new(io::ErrorKind::Other, "Failed to open EPUB file"));
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Failed to open EPUB file",
+            ));
         }
     };
 
@@ -33,12 +38,22 @@ pub fn make_file(input_epub: &str, output_path: &str) -> io::Result<()> {
         Ok(file) => file,
         Err(e) => {
             eprintln!("Failed to create output file: {}", e);
-            return Err(io::Error::new(io::ErrorKind::Other, "Failed to create output file"));
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Failed to create output file",
+            ));
         }
     };
 
-    // Define phrases to filter out
-    let filter_phrases = vec!["copyright", "landmarks", "table of contents", "illustration"];
+    // Define titles to filter out
+    let filter_phrases = vec![
+        "copyright",
+        "landmarks", // check if this will cause issues
+        "table of contents",
+        "illustration",
+        "contents",
+        "navigation",
+    ];
 
     // Function to check if a title should be filtered out
     fn should_filter(title: &str, filter_phrases: &[&str]) -> bool {
@@ -79,7 +94,10 @@ pub fn make_file(input_epub: &str, output_path: &str) -> io::Result<()> {
                                 );
                                 if let Err(e) = output_file.write_all(output.as_bytes()) {
                                     eprintln!("Failed to write to output file: {}", e);
-                                    return Err(io::Error::new(io::ErrorKind::Other, "Failed to write to output file"));
+                                    return Err(io::Error::new(
+                                        io::ErrorKind::Other,
+                                        "Failed to write to output file",
+                                    ));
                                 }
                             }
 
@@ -102,7 +120,13 @@ pub fn make_file(input_epub: &str, output_path: &str) -> io::Result<()> {
                                 if !current_chapter_title.is_empty()
                                     && !current_chapter_content.contains(&trimmed_text)
                                 {
-                                    current_chapter_content.push_str(&trimmed_text.lines().skip(1).collect::<Vec<_>>().join("\n"));
+                                    current_chapter_content.push_str(
+                                        &trimmed_text
+                                            .lines()
+                                            .skip(1)
+                                            .collect::<Vec<_>>()
+                                            .join("\n"),
+                                    );
                                     current_chapter_content.push('\n'); // Add a newline for readability
                                 }
                             } else {
@@ -131,7 +155,10 @@ pub fn make_file(input_epub: &str, output_path: &str) -> io::Result<()> {
         );
         if let Err(e) = output_file.write_all(output.as_bytes()) {
             eprintln!("Failed to write to output file: {}", e);
-            return Err(io::Error::new(io::ErrorKind::Other, "Failed to write to output file"));
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Failed to write to output file",
+            ));
         }
     }
 

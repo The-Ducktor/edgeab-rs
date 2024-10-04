@@ -1,8 +1,8 @@
 use image::GenericImageView;
-
 use mp4ameta::{Img, ImgFmt, Tag};
 use regex::Regex;
 use std::fs::File;
+use std::path::Path;
 use std::io::BufReader;
 use std::process::Command;
 use std::{collections::HashMap, fs};
@@ -85,35 +85,41 @@ fn add_cover_to_m4b(m4b_path: &str, cover_image_path: &str) {
     // Write the updated tag back to the M4B file
     tag.write_to_path(m4b_path)
         .expect("Failed to write updated tag to M4B file");
+    
+    fs::remove_file(Path::new(cover_path)).ok();
 }
 
-pub fn add_metadata(input_file: &String, metadata: &HashMap<String, String>, cover_image: &str) {
-    let title = match metadata.get("title") {
-        Some(title) => remove_html_tags(title),
-        None => {
-            eprintln!("Title metadata is required to name the output file.");
-            return;
-        }
-    };
+pub fn add_metadata(
+    input_file: &String,
+    metadata: Option<&HashMap<String, String>>,
+    cover_image: &str,
+) {
+    let title = metadata
+        .and_then(|meta| meta.get("title"))
+        .map(|title| remove_html_tags(title))
+        .unwrap_or_else(|| "generated_book".to_string());
 
     let output_file = format!("{}.m4b", title);
     let mut args = vec!["-i", input_file];
 
     let mut metadata_args = Vec::new();
 
-    for (key, value) in metadata {
-        let data = format!("{}={}", key, remove_html_tags(value));
-        metadata_args.push(data);
+    if let Some(meta) = metadata {
+        for (key, value) in meta {
+            let data = format!("{}={}", key, remove_html_tags(value));
+            metadata_args.push(data);
 
-        if key == "title" {
-            let album_data = format!("album={}", remove_html_tags(value));
-            metadata_args.push(album_data);
+            if key == "title" {
+                let album_data = format!("album={}", remove_html_tags(value));
+                metadata_args.push(album_data);
+            }
         }
     }
-
-    for data in &metadata_args {
-        args.push("-metadata");
-        args.push(&data);
+    if metadata.is_some() {
+        for data in &metadata_args {
+            args.push("-metadata");
+            args.push(&data);
+        }
     }
 
     // Stream mapping: map only audio

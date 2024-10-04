@@ -7,12 +7,14 @@ use book::{get_titles, read_sections, Book}; // Import book module functions
 use clap::Parser;
 use colored::*;
 use edge_tts::{build_ssml, request_audio};
-use ffmpeg::concatenate_audio_files;
+use ffmpeg::{concatenate_audio_files, is_ffmpeg_installed};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::fs::{self, OpenOptions};
 use std::io;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::exit;
+
 use tokio::task;
 
 const AUDIO_OUTPUT_DIR: &str = "./tmp"; // Set the output / temp directory
@@ -28,48 +30,52 @@ async fn read_chapter(chapter_number: usize, texts: Vec<String>) {
 
         // Print the rest in dark grey (or black)
         for line in &texts[1..4] {
-            // Adjust the range as needed
-            println!("{}", line.bright_black()); // You can also use line.black() for black color
+            println!("{}", line.bright_black());
         }
     }
 
     let mut tasks = Vec::new();
     let pb = ProgressBar::new(texts.len() as u64);
     let sty = ProgressStyle::with_template(
-        "{spinner:.green} {msg} [{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7}",
+        "{spinner:.green}  [{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} | {percent_precise}% | ({per_sec:.2} pg/s) {eta} {msg}",
     )
     .unwrap()
     .progress_chars("█░");
     pb.set_style(sty);
 
+    // Record the start time for calculating speed
+
     for (i, text) in texts.iter().enumerate() {
-        // Use chapter_number in the filename for unique identification
         let output_file = format!("{}/c{}_p_{}.mp3", AUDIO_OUTPUT_DIR, chapter_number, i + 1);
 
         let task = task::spawn({
             let text_clone = text.clone();
             let text_preview = text.clone();
             let output_file_clone = output_file.clone();
-            let pb_clone = pb.clone(); // Clone the ProgressBar for use in the async block
+            let pb_clone = pb.clone();
 
             async move {
                 if let Err(e) = gen_audio(text_clone, output_file_clone).await {
                     println!("Error generating audio {}", e);
                 } else {
-                    match fs::metadata(output_file.clone()) {
+                    match fs::metadata(&output_file) {
                         Ok(metadata) => {
-                            let file_size = metadata.len(); // File size in bytes
+                            let file_size = metadata.len();
                             if file_size < 1 {
-                                println!("Empty File delting ({})", text_preview.black());
-                                fs::remove_file(output_file.clone())
-                                    .expect("Failed to remove file");
+                                let text_pre = text_preview.black(); // Get the filename from your text_preview object
+                                let message =
+                                    format!("| Empty File deleting ({}) i: {}", text_pre, i + 1); // Create the formatted message
+                                pb_clone.set_message(message);
+
+                                fs::remove_file(&output_file).expect("Failed to remove file");
                             }
                         }
                         Err(e) => {
                             eprintln!("Error reading file metadata: {}", e);
                         }
                     }
-                    pb_clone.inc(1); // Increment the progress bar
+
+                    pb_clone.inc(1);
                 }
             }
         });
@@ -78,10 +84,10 @@ async fn read_chapter(chapter_number: usize, texts: Vec<String>) {
     }
 
     for task in tasks {
-        let _ = task.await; // Await each task
+        let _ = task.await;
     }
 
-    pb.finish_with_message("All audio files generated!"); // Finish the progress bar
+    pb.finish_with_message("All audio files generated!");
 }
 
 async fn combine_chapter(mut files: Vec<String>, output_file: &str) {
@@ -111,8 +117,9 @@ async fn combine_chapter(mut files: Vec<String>, output_file: &str) {
 }
 
 async fn gen_audio(txt: String, output_file: String) -> Result<(), Box<dyn std::error::Error>> {
+    let voice = "en-US-BrianNeural";
     let audio_data = request_audio(
-        &build_ssml(&txt, "en-US-BrianNeural", "medium", "medium", "medium"),
+        &build_ssml(&txt, voice, "medium", "medium", "medium"),
         "audio-24khz-96kbitrate-mono-mp3",
     )?;
 
@@ -172,7 +179,7 @@ fn get_chap_files(dir: &Path) -> io::Result<Vec<String>> {
 
     Ok(files) // Return the vector of file paths
 }
-async fn make_book(book_path: &str, opf_file: &str, cover: &str) {
+async fn make_book(book_path: &str, opf_file: Option<&str>, cover: &str) {
     let chapters = read_sections(book_path);
     let titles = get_titles(book_path);
     let min_length = chapters.len().min(titles.len());
@@ -181,9 +188,8 @@ async fn make_book(book_path: &str, opf_file: &str, cover: &str) {
     let mut book = Book::new();
     if chapters[0][0].starts_with("Title: ") {
         // make work with python generated files
-        println!("{}","using Python generated style file".yellow()); // informative
+        println!("{}", "using Python generated style file".yellow()); // informative
         for i in 1..min_length {
-            
             book.add_chapter(&titles[i], chapters[i].clone());
         }
     } else {
@@ -243,9 +249,12 @@ async fn make_book(book_path: &str, opf_file: &str, cover: &str) {
         println!("Trying to remove file");
         fs::remove_file(file).ok();
     }
-
-    let metadata_map = metdata::get_metadata(opf_file);
-    metdata::add_metadata(&output_file, &metadata_map, &cover);
+    if opf_file.is_some() {
+        let metadata_map = metdata::get_metadata(opf_file.unwrap());
+        metdata::add_metadata(&output_file, Some(&metadata_map), &cover);
+    } else {
+        metdata::add_metadata(&output_file, None, &cover);
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -259,27 +268,35 @@ struct Args {
     opf: Option<String>,
     #[arg(short, long)]
     cover: Option<String>,
+
+    #[arg(short, long)]
+    voice: Option<String>,
 }
 
 #[tokio::main]
 async fn main() {
+    if !is_ffmpeg_installed() {
+        eprintln!("{}", "FFmpeg isn't Installed".red());
+        exit(1);
+    }
     fs::create_dir_all(AUDIO_OUTPUT_DIR).ok();
     let args = Args::parse();
-
     let file_path = args.file;
     let opf_file = args.opf.unwrap_or_else(|| "none.opf".to_string()); // Use a default or handle None case
     let cover = args.cover.unwrap_or_else(|| "none.img".to_string());
+    let file_exists = Path::new(&file_path).exists();
     println!("file: {}, opf: {}, cover: {}", file_path, opf_file, cover);
 
-    if file_path.ends_with(".txt") {
+    if file_path.ends_with(".txt") && file_exists {
         if opf_file != "none.opf" {
             if cover == "none.img" {
                 println!("{}", "no cover image provided".yellow())
             }
-            make_book(&file_path, &opf_file, &cover).await;
+            make_book(&file_path, Some(&opf_file), &cover).await;
         } else {
-            let message = "Missing OPF file";
-            println!("{}", message.red())
+            let message = "Missing OPF file \nThis is highly Recommended as it adds Title \nYou can make this with Calibre";
+            println!("{}", message.yellow());
+            make_book(&file_path, None, &cover).await;
         }
         // If opf is None, you can provide some default logic for handling
     } else if file_path.ends_with(".epub") {
@@ -288,6 +305,8 @@ async fn main() {
             "Creating Intermediate File You can edit this".yellow()
         );
         epub::make_file(&file_path, "book.txt").ok();
+    } else {
+        println!("{}", "Missing Epub or  Intermediate".red());
     }
     fs::remove_dir_all(AUDIO_OUTPUT_DIR).ok();
 }

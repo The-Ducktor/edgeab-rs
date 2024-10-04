@@ -5,6 +5,15 @@ use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
+pub fn is_ffmpeg_installed() -> bool {
+    Command::new("ffmpeg")
+        .arg("-version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+
 pub fn create_silence_if_not_exists(duration: f64, output_path: &str) {
     if !Path::new(output_path).exists() {
         Command::new("ffmpeg")
