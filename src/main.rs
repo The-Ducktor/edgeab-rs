@@ -373,7 +373,7 @@ async fn cli(args: Args) {
     } else {
         println!("{}", "INVALID File".red());
     }
-    fs::remove_dir_all(AUDIO_OUTPUT_DIR).ok(); // Wrap CLI if want to bypass it
+    
 }
 
 #[tokio::main]
@@ -390,4 +390,5 @@ async fn main() {
     } else {
         cli(args).await;
     }
+    fs::remove_dir_all(AUDIO_OUTPUT_DIR).ok();
 }
