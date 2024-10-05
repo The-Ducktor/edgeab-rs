@@ -254,34 +254,99 @@ async fn make_book(book_path: &str, opf_file: Option<&str>, cover: &str) {
         metdata::add_metadata(&output_file, Some(&metadata_map), &cover);
     } else {
         metdata::add_metadata(&output_file, None, &cover);
-    }
+    } // Book Generate the Audiobook
 }
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// file
+    /// Input File EPUB or Generated TXT
     #[arg(short, long)]
-    file: String,
+    file: Option<String>,
 
+    /// A Calibre generated metadata.opf file
     #[arg(short, long)]
     opf: Option<String>,
+
+    /// A cover img
     #[arg(short, long)]
     cover: Option<String>,
 
+    /// (TODO) Change the generated voice
     #[arg(short, long)]
-    voice: Option<String>,
+    voice: Option<String>, // currently unused | TODO add ability to change TTS voice used
+
+    /// Enable interactive mode
+    #[arg(long, short, action)]
+       interactive: bool,
+    
 }
 
-#[tokio::main]
-async fn main() {
-    if !is_ffmpeg_installed() {
-        eprintln!("{}", "FFmpeg isn't Installed".red());
-        exit(1);
+fn u_input(text_hint: &str) -> String {
+    let mut uinput = String::new();
+    print!("{}", text_hint);
+    io::stdout().flush().expect("Failed to flush stdout"); // Ensure the prompt is displayed immediately
+    io::stdin()
+        .read_line(&mut uinput)
+        .expect("Failed to read line");
+    uinput.trim().to_string() // Convert the input to string and trim whitespaces
+}
+
+async fn interactive_input() {
+    let mut file = "none.txt".to_string(); // Changed to String to hold user input
+    let mut file_exists = false;
+    let mut opf = "none.opf".to_string(); // Changed to String
+    let mut opf_exists = false;
+    let mut cover = "none.img".to_string(); // Changed to String
+    let mut cover_exists = false;
+
+    // File Input Loop
+    while !file_exists {
+        file = u_input("Enter Path to Epub or generated txt: ");
+        file_exists = Path::new(&file).exists(); // Check if file exists
+        if !file_exists {
+            println!("File does not exist, please try again.");
+        }
     }
-    fs::create_dir_all(AUDIO_OUTPUT_DIR).ok();
-    let args = Args::parse();
-    let file_path = args.file;
+
+    // Optional OPF Input Loop
+    while !opf_exists {
+        opf = u_input("(Optional) Please Enter Path to Calibre metadata.OPF: ");
+        if opf.is_empty() { // Skip if user doesn't provide input
+            println!("No OPF file provided, proceeding without OPF.");
+            opf = "none.opf".to_string();
+            break;
+        }
+        opf_exists = Path::new(&opf).exists(); // Check if file exists
+        if !opf_exists {
+            println!("OPF file does not exist, please try again.");
+        }
+    }
+
+    // Optional Cover Input Loop
+    while !cover_exists {
+        cover = u_input("(Optional) Please Enter Path to Cover Image: ");
+        if cover.is_empty() { // Skip if user doesn't provide input
+            println!("No cover image provided, proceeding without cover.");
+            cover = "none.img".to_string();
+            break;
+        }
+        cover_exists = Path::new(&cover).exists(); // Check if file exists
+        if !cover_exists {
+            println!("Cover image does not exist, please try again.");
+        }
+    }
+
+    // Call to make_book function with the correct parameters
+    if opf != "none.opf" {
+        make_book(&file, Some(&opf), &cover).await; // Added cover as parameter
+    } else {
+        make_book(&file, None, &cover).await; // Call without OPF
+    }
+    // You can now use `file`, `opf`, and `cover` variables as needed in your code
+}
+async fn cli(args: Args) {
+    let file_path = args.file.unwrap_or_else(|| "none.text".to_string());
     let opf_file = args.opf.unwrap_or_else(|| "none.opf".to_string()); // Use a default or handle None case
     let cover = args.cover.unwrap_or_else(|| "none.img".to_string());
     let file_exists = Path::new(&file_path).exists();
@@ -306,7 +371,23 @@ async fn main() {
         );
         epub::make_file(&file_path, "book.txt").ok();
     } else {
-        println!("{}", "Missing Epub or  Intermediate".red());
+        println!("{}", "INVALID File".red());
     }
-    fs::remove_dir_all(AUDIO_OUTPUT_DIR).ok();
+    fs::remove_dir_all(AUDIO_OUTPUT_DIR).ok(); // Wrap CLI if want to bypass it
+}
+
+#[tokio::main]
+async fn main() {
+    if !is_ffmpeg_installed() {
+        // CHeck if ffmpeg is isntalled
+        eprintln!("{}", "FFmpeg isn't Installed".red());
+        exit(1);
+    }
+    fs::create_dir_all(AUDIO_OUTPUT_DIR).ok();
+    let args = Args::parse();
+    if args.interactive {
+        interactive_input().await;
+    } else {
+        cli(args).await;
+    }
 }

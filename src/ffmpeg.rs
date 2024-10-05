@@ -13,7 +13,6 @@ pub fn is_ffmpeg_installed() -> bool {
         .unwrap_or(false)
 }
 
-
 pub fn create_silence_if_not_exists(duration: f64, output_path: &str) {
     if !Path::new(output_path).exists() {
         Command::new("ffmpeg")

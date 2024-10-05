@@ -58,7 +58,7 @@ pub fn get_titles(file_path: &str) -> Vec<String> {
     // Read lines from the file
     for line in reader.lines() {
         let line = line.expect("Failed to read line"); // Unwrap the result
-        // Check if the line starts with "# "
+                                                       // Check if the line starts with "# "
         if line.starts_with("# ") {
             chapters.push(line.replace("# ", "").trim().to_string());
         }

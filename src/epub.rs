@@ -5,8 +5,6 @@ use scraper::{Html, Selector};
 use std::fs::File;
 use std::io::{self, Write};
 
-
-
 /// Function to extract chapter previews from an EPUB file and write them to an output file.
 /// Filters out chapters with titles containing unwanted phrases.
 pub fn make_file(input_epub: &str, output_path: &str) -> io::Result<()> {

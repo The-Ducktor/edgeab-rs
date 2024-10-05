@@ -2,8 +2,8 @@ use image::GenericImageView;
 use mp4ameta::{Img, ImgFmt, Tag};
 use regex::Regex;
 use std::fs::File;
-use std::path::Path;
 use std::io::BufReader;
+use std::path::Path;
 use std::process::Command;
 use std::{collections::HashMap, fs};
 use xmltree::{Element, XMLNode};
@@ -85,7 +85,7 @@ fn add_cover_to_m4b(m4b_path: &str, cover_image_path: &str) {
     // Write the updated tag back to the M4B file
     tag.write_to_path(m4b_path)
         .expect("Failed to write updated tag to M4B file");
-    
+
     fs::remove_file(Path::new(cover_path)).ok();
 }
 
@@ -181,6 +181,21 @@ pub fn get_metadata(file_path: &str) -> HashMap<String, String> {
             .get_child("language")
             .map(|lang| get_text_from_element(lang))
             .unwrap_or_else(|| "Language not found".to_string());
+        let genre: Vec<String> = metadata_node
+            .children
+            .iter()
+            .filter_map(|child| {
+                if let XMLNode::Element(elem) = child {
+                    if elem.name == "subject" {
+                        Some(get_text_from_element(elem))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         // Collecting all creators (authors)
         let authors: Vec<String> = metadata_node
@@ -199,12 +214,15 @@ pub fn get_metadata(file_path: &str) -> HashMap<String, String> {
             })
             .collect();
 
-        // Insert metadata into the HashMap
+        // Insert OPF Data
         metadata_map.insert("title".to_string(), title);
         metadata_map.insert("date".to_string(), date);
         metadata_map.insert("description".to_string(), description);
         metadata_map.insert("language".to_string(), language);
-        metadata_map.insert("author".to_string(), authors.join(", "));
+        metadata_map.insert("artist".to_string(), authors.join(", "));
+        metadata_map.insert("genre".to_string(), genre.join(", "));
+        // Static Data
+        metadata_map.insert("encoder".to_string(), "FFmpeg".to_string());
     }
 
     metadata_map // Return the HashMap with metadata
