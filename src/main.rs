@@ -281,92 +281,87 @@ struct Args {
     interactive: bool,
 }
 
-fn u_input(text_hint: &str) -> String {
-    let mut uinput = String::new();
-    print!("{}", text_hint);
-    io::stdout().flush().expect("Failed to flush stdout"); // Ensure the prompt is displayed immediately
-    io::stdin()
-        .read_line(&mut uinput)
-        .expect("Failed to read line");
-    let user_input = uinput.trim().to_string(); // Convert the input to string and trim whitespaces
-    if &user_input.to_lowercase()  == "quit" {
-        println!("Exiting!");
-        exit(0)
-    } else {
-        return user_input;
-    }
-    
-}
-async fn interactive_input() {
-    let mut file = "none.txt".to_string(); // Changed to String to hold user input
-    let mut file_exists = false;
-    let mut opf = "none.opf".to_string(); // Changed to String
-    let mut opf_exists = false;
-    let mut cover = "none.img".to_string(); // Changed to String
-    let mut cover_exists = false;
+const DEFAULT_OPF: &str = "none.opf";
+const DEFAULT_COVER: &str = "none.img";
 
-    // File Input Loop
-    while !file_exists {
-        file = u_input("Enter Path to Epub or generated txt: ");
-        file_exists = Path::new(&file).exists(); // Check if file exists
-        if !file_exists {
-            println!("File does not exist, please try again.");
-        }
+fn u_input(prompt: &str) -> String {
+    let mut input = String::new();
+    print!("{}", prompt);
+    io::stdout().flush().expect("Failed to flush stdout");
+    io::stdin()
+        .read_line(&mut input)
+        .expect("Failed to read line");
+    let input = input.trim().to_string();
+
+    if input.to_lowercase() == "quit" {
+        println!("Exiting!");
+        exit(0);
     }
-    if file.ends_with(".epub") { // Intermediate File if not exist
+
+    input
+}
+
+// Helper function to validate file existence
+fn get_valid_file_path(prompt: &str, optional: bool) -> String {
+    loop {
+        let input = u_input(prompt);
+        if input.is_empty() && optional {
+            return String::new();
+        }
+        if Path::new(&input).exists() {
+            return input;
+        }
+        println!("File does not exist, please try again.");
+    }
+}
+
+async fn interactive_input() {
+    // Mandatory file input
+    let file = get_valid_file_path("Enter Path to Epub or generated txt: ", false);
+
+    if file.ends_with(".epub") {
         println!(
             "{}",
-            "Creating Intermediate File (\"book.txt\")You can edit this".yellow()
+            "Creating Intermediate File (\"book.txt\") You can edit this".yellow()
         );
         epub::make_file(&file, "book.txt").ok();
-        exit(0)
-    } else {
+        exit(0);
+    } else if !file.ends_with(".txt") {
         println!("{}", "INVALID File".red());
+        return;
     }
 
-    // Optional OPF Input Loop
-    while !opf_exists {
-        opf = u_input("(Optional) Please Enter Path to Calibre metadata.OPF: ");
-        if opf.is_empty() {
-            // Skip if user doesn't provide input
-            println!("No OPF file provided, proceeding without OPF.");
-            opf = "none.opf".to_string();
-            break;
-        }
-        opf_exists = Path::new(&opf).exists(); // Check if file exists
-        if !opf_exists {
-            println!("OPF file does not exist, please try again.");
-        }
-    }
+    // Optional OPF input
+    let opf = get_valid_file_path(
+        "(Optional) Please Enter Path to Calibre metadata.OPF: ",
+        true,
+    );
+    let opf = if opf.is_empty() {
+        DEFAULT_OPF.to_string()
+    } else {
+        opf
+    };
 
-    // Optional Cover Input Loop
-    while !cover_exists {
-        cover = u_input("(Optional) Please Enter Path to Cover Image: ");
-        if cover.is_empty() {
-            // Skip if user doesn't provide input
-            println!("No cover image provided, proceeding without cover.");
-            cover = "none.img".to_string();
-            break;
-        }
-        cover_exists = Path::new(&cover).exists(); // Check if file exists
-        if !cover_exists {
-            println!("Cover image does not exist, please try again.");
-        }
-    }
+    // Optional Cover input
+    let cover = get_valid_file_path("(Optional) Please Enter Path to Cover Image: ", true);
+    let cover = if cover.is_empty() {
+        DEFAULT_COVER.to_string()
+    } else {
+        cover
+    };
+
     // Start Logic
     println!("file: {}, opf: {}, cover: {}", &file, &opf, &cover);
+
     if file.ends_with(".txt") {
-        if opf != "none.opf" {
+        if opf != DEFAULT_OPF {
             make_book(&file, Some(&opf), &cover).await;
         } else {
-            make_book(&file, None, &cover).await; // Call without OPF
+            make_book(&file, None, &cover).await;
         }
     }
-
-    // Call to make_book function with the correct parameters
-
-    // You can now use `file`, `opf`, and `cover` variables as needed in your code
 }
+
 async fn cli(args: Args) {
     let file_path = args.file.unwrap_or_else(|| "none.text".to_string());
     let opf_file = args.opf.unwrap_or_else(|| "none.opf".to_string()); // Use a default or handle None case
