@@ -278,8 +278,7 @@ struct Args {
 
     /// Enable interactive mode
     #[arg(long, short, action)]
-       interactive: bool,
-    
+    interactive: bool,
 }
 
 fn u_input(text_hint: &str) -> String {
@@ -289,9 +288,15 @@ fn u_input(text_hint: &str) -> String {
     io::stdin()
         .read_line(&mut uinput)
         .expect("Failed to read line");
-    uinput.trim().to_string() // Convert the input to string and trim whitespaces
+    let user_input = uinput.trim().to_string(); // Convert the input to string and trim whitespaces
+    if &user_input.to_lowercase()  == "quit" {
+        println!("Exiting!");
+        exit(0)
+    } else {
+        return user_input;
+    }
+    
 }
-
 async fn interactive_input() {
     let mut file = "none.txt".to_string(); // Changed to String to hold user input
     let mut file_exists = false;
@@ -308,11 +313,22 @@ async fn interactive_input() {
             println!("File does not exist, please try again.");
         }
     }
+    if file.ends_with(".epub") { // Intermediate File if not exist
+        println!(
+            "{}",
+            "Creating Intermediate File (\"book.txt\")You can edit this".yellow()
+        );
+        epub::make_file(&file, "book.txt").ok();
+        exit(0)
+    } else {
+        println!("{}", "INVALID File".red());
+    }
 
     // Optional OPF Input Loop
     while !opf_exists {
         opf = u_input("(Optional) Please Enter Path to Calibre metadata.OPF: ");
-        if opf.is_empty() { // Skip if user doesn't provide input
+        if opf.is_empty() {
+            // Skip if user doesn't provide input
             println!("No OPF file provided, proceeding without OPF.");
             opf = "none.opf".to_string();
             break;
@@ -326,7 +342,8 @@ async fn interactive_input() {
     // Optional Cover Input Loop
     while !cover_exists {
         cover = u_input("(Optional) Please Enter Path to Cover Image: ");
-        if cover.is_empty() { // Skip if user doesn't provide input
+        if cover.is_empty() {
+            // Skip if user doesn't provide input
             println!("No cover image provided, proceeding without cover.");
             cover = "none.img".to_string();
             break;
@@ -336,13 +353,18 @@ async fn interactive_input() {
             println!("Cover image does not exist, please try again.");
         }
     }
+    // Start Logic
+    println!("file: {}, opf: {}, cover: {}", &file, &opf, &cover);
+    if file.ends_with(".txt") {
+        if opf != "none.opf" {
+            make_book(&file, Some(&opf), &cover).await;
+        } else {
+            make_book(&file, None, &cover).await; // Call without OPF
+        }
+    }
 
     // Call to make_book function with the correct parameters
-    if opf != "none.opf" {
-        make_book(&file, Some(&opf), &cover).await; // Added cover as parameter
-    } else {
-        make_book(&file, None, &cover).await; // Call without OPF
-    }
+
     // You can now use `file`, `opf`, and `cover` variables as needed in your code
 }
 async fn cli(args: Args) {
@@ -367,13 +389,12 @@ async fn cli(args: Args) {
     } else if file_path.ends_with(".epub") {
         println!(
             "{}",
-            "Creating Intermediate File You can edit this".yellow()
+            "Creating Intermediate File (\"book.txt\")You can edit this".yellow()
         );
         epub::make_file(&file_path, "book.txt").ok();
     } else {
         println!("{}", "INVALID File".red());
     }
-    
 }
 
 #[tokio::main]
