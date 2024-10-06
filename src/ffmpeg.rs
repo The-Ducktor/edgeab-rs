@@ -117,6 +117,8 @@ pub fn add_chapter_data(
         .arg("-c")
         .arg("copy") // Copy the streams
         .arg(tmp_file) // Temporary output file
+        .stdout(Stdio::null()) // Hide standard output
+        .stderr(Stdio::null())
         .status()?;
 
     let _chapter_status = Command::new("ffmpeg")
@@ -129,6 +131,8 @@ pub fn add_chapter_data(
         .arg("-c")
         .arg("copy") // Copy the streams
         .arg(output_file) // Final output file
+        .stdout(Stdio::null()) // Hide standard output
+        .stderr(Stdio::null())
         .status()?;
     fs::remove_file(tmp_file).ok();
 
