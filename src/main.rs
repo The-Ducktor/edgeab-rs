@@ -19,7 +19,7 @@ use tokio::task;
 
 const AUDIO_OUTPUT_DIR: &str = "./tmp"; // Set the output / temp directory
 
-async fn read_chapter(chapter_number: usize, texts: Vec<String>) {
+async fn read_chapter(chapter_number: usize, texts: Vec<String>, tts_voice: String) {
     if texts.len() < 2 {
         println!("Not enough text to display for chapter {}", chapter_number);
         return; // Early exit if there aren't enough texts
@@ -179,7 +179,7 @@ fn get_chap_files(dir: &Path) -> io::Result<Vec<String>> {
 
     Ok(files) // Return the vector of file paths
 }
-async fn make_book(book_path: &str, opf_file: Option<&str>, cover: &str) {
+async fn make_book(book_path: &str, opf_file: Option<&str>, cover: &str, tts_voice: &str) {
     let chapters = read_sections(book_path);
     let titles = get_titles(book_path);
     let min_length = chapters.len().min(titles.len());
