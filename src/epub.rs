@@ -83,27 +83,33 @@ pub fn make_file(input_epub: &str, output_path: &str) -> io::Result<()> {
                                 .trim()
                                 .to_string();
 
+                            // Remove the '#' character from the chapter title if it exists
+                            let formatted_title = chapter_title.strip_prefix('#').unwrap_or(&chapter_title).trim().to_string();
+
                             // If we have a previous chapter and it's not filtered, write it to the file
                             if !current_chapter_title.is_empty() && !skip_chapter {
-                                // Write full chapter preview to file
-                                let output = format!(
-                                    "# {}\n{}\n\n",
-                                    current_chapter_title, current_chapter_content
-                                );
-                                if let Err(e) = output_file.write_all(output.as_bytes()) {
-                                    eprintln!("Failed to write to output file: {}", e);
-                                    return Err(io::Error::new(
-                                        io::ErrorKind::Other,
-                                        "Failed to write to output file",
-                                    ));
+                                if !current_chapter_content.trim().is_empty() {
+                                    // Write the valid chapter with content
+                                    let output = format!(
+                                        "# {}\n{}\n{}\n\n",
+                                        current_chapter_title, current_chapter_content, formatted_title
+                                    );
+
+                                    if let Err(e) = output_file.write_all(output.as_bytes()) {
+                                        eprintln!("Failed to write to output file: {}", e);
+                                        return Err(io::Error::new(
+                                            io::ErrorKind::Other,
+                                            "Failed to write to output file",
+                                        ));
+                                    }
                                 }
                             }
 
                             // Check if the new chapter should be skipped
-                            skip_chapter = should_filter(&chapter_title, &filter_phrases);
+                            skip_chapter = should_filter(&formatted_title, &filter_phrases);
 
                             // Start a new chapter, clear previous chapter content
-                            current_chapter_title = chapter_title;
+                            current_chapter_title = formatted_title;
                             current_chapter_content.clear(); // Clear previous content
                         }
 

@@ -18,7 +18,7 @@ use std::process::exit;
 use tokio::task;
 
 const AUDIO_OUTPUT_DIR: &str = "./tmp"; // Set the output / temp directory
-
+/// Read Chapter given a Vector of Strings of each line with mild custimziation for setting tts name
 async fn read_chapter(chapter_number: usize, texts: Vec<String>, tts_voice: String) {
     if texts.len() < 2 {
         println!("Not enough text to display for chapter {}", chapter_number);
@@ -47,6 +47,7 @@ async fn read_chapter(chapter_number: usize, texts: Vec<String>, tts_voice: Stri
 
     for (i, text) in texts.iter().enumerate() {
         let output_file = format!("{}/c{}_p_{}.mp3", AUDIO_OUTPUT_DIR, chapter_number, i + 1);
+        let tts_voice_clone = tts_voice.clone();
 
         let task = task::spawn({
             let text_clone = text.clone();
