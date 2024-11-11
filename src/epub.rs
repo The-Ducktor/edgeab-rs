@@ -13,10 +13,7 @@ pub fn make_file(input_epub: &str, output_path: &str) -> io::Result<()> {
         Ok(epub) => epub,
         Err(e) => {
             eprintln!("Failed to open EPUB file: {}", e);
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Failed to open EPUB file",
-            ));
+            return Err(io::Error::new(io::ErrorKind::Other, "Failed to open EPUB file"));
         }
     };
 
@@ -36,17 +33,14 @@ pub fn make_file(input_epub: &str, output_path: &str) -> io::Result<()> {
         Ok(file) => file,
         Err(e) => {
             eprintln!("Failed to create output file: {}", e);
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Failed to create output file",
-            ));
+            return Err(io::Error::new(io::ErrorKind::Other, "Failed to create output file"));
         }
     };
 
     // Define titles to filter out
     let filter_phrases = vec![
         "copyright",
-        "landmarks", // check if this will cause issues
+        "landmarks",
         "table of contents",
         "illustration",
         "contents",
@@ -83,55 +77,52 @@ pub fn make_file(input_epub: &str, output_path: &str) -> io::Result<()> {
                                 .trim()
                                 .to_string();
 
-                            // Remove the '#' character from the chapter title if it exists
-                            let formatted_title = chapter_title.strip_prefix('#').unwrap_or(&chapter_title).trim().to_string();
+                            // Clean up the chapter title by removing any '#' prefix and trimming spaces
+                            let formatted_title = chapter_title
+                                .strip_prefix('#')
+                                .unwrap_or(&chapter_title)
+                                .trim()
+                                .replace("\n", " ") // Replace line breaks with spaces in titles
+                                .to_string();
 
-                            // If we have a previous chapter and it's not filtered, write it to the file
-                            if !current_chapter_title.is_empty() && !skip_chapter {
+                            // If we encounter a new chapter title, write out the previous one
+                            if !last_title.is_empty() && !skip_chapter {
                                 if !current_chapter_content.trim().is_empty() {
-                                    // Write the valid chapter with content
+                                    // Write previous chapter content with its title
                                     let output = format!(
-                                        "# {}\n{}\n{}\n\n",
-                                        current_chapter_title, current_chapter_content, formatted_title
+                                        "# {}\n{}\n\n",
+                                        last_title, current_chapter_content
                                     );
-
                                     if let Err(e) = output_file.write_all(output.as_bytes()) {
                                         eprintln!("Failed to write to output file: {}", e);
-                                        return Err(io::Error::new(
-                                            io::ErrorKind::Other,
-                                            "Failed to write to output file",
-                                        ));
+                                        return Err(io::Error::new(io::ErrorKind::Other, "Failed to write to output file"));
                                     }
                                 }
                             }
 
-                            // Check if the new chapter should be skipped
+                            // Set the flag for skipping if this chapter should be skipped
                             skip_chapter = should_filter(&formatted_title, &filter_phrases);
 
-                            // Start a new chapter, clear previous chapter content
-                            current_chapter_title = formatted_title;
+                            // Reset content accumulator for the new chapter
+                            last_title = formatted_title.clone(); // Use formatted title for the next chapter
                             current_chapter_content.clear(); // Clear previous content
                         }
 
-                        // Collect all text content in the current chapter if not skipped
+                        // Now collect content for the chapter (without starting a new chapter yet)
                         if !skip_chapter {
                             let body = document.select(&Selector::parse("body").unwrap()).next();
                             if let Some(body_element) = body {
                                 let plain_text = body_element.text().collect::<Vec<_>>().join(" ");
-                                let trimmed_text = plain_text.trim();
 
-                                // Append the current text to the chapter content
-                                if !current_chapter_title.is_empty()
-                                    && !current_chapter_content.contains(&trimmed_text)
-                                {
-                                    current_chapter_content.push_str(
-                                        &trimmed_text
-                                            .lines()
-                                            .skip(1)
-                                            .collect::<Vec<_>>()
-                                            .join("\n"),
-                                    );
-                                    current_chapter_content.push('\n'); // Add a newline for readability
+                                // Clean the text: only remove extra whitespace and newlines, but keep formatting
+                                let cleaned_text = plain_text
+                                    .replace("\r", "")  // Remove carriage returns
+                                    .to_string();
+
+                                if !cleaned_text.is_empty() {
+                                    // Add accumulated content with appropriate formatting
+                                    current_chapter_content.push_str(&cleaned_text);
+                                    current_chapter_content.push('\n'); // Add newline for readability
                                 }
                             } else {
                                 eprintln!("Failed to find body in content.");
@@ -150,19 +141,17 @@ pub fn make_file(input_epub: &str, output_path: &str) -> io::Result<()> {
         }
     }
 
-    // Write the last chapter if it exists and wasn't filtered
-    if !current_chapter_title.is_empty() && !skip_chapter {
-        // Write the last chapter to the file
-        let output = format!(
-            "# {}\n{}\n\n",
-            current_chapter_title, current_chapter_content
-        );
-        if let Err(e) = output_file.write_all(output.as_bytes()) {
-            eprintln!("Failed to write to output file: {}", e);
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Failed to write to output file",
-            ));
+    // After finishing processing all content, write the last chapter if it exists and wasn't filtered
+    if !last_title.is_empty() && !skip_chapter {
+        if !current_chapter_content.trim().is_empty() {
+            let output = format!(
+                "# {}\n{}\n\n",
+                last_title, current_chapter_content
+            );
+            if let Err(e) = output_file.write_all(output.as_bytes()) {
+                eprintln!("Failed to write to output file: {}", e);
+                return Err(io::Error::new(io::ErrorKind::Other, "Failed to write to output file"));
+            }
         }
     }
 

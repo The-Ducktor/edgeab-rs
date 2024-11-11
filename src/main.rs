@@ -56,7 +56,7 @@ async fn read_chapter(chapter_number: usize, texts: Vec<String>, tts_voice: Stri
             let pb_clone = pb.clone();
 
             async move {
-                if let Err(e) = gen_audio(text_clone, output_file_clone).await {
+                if let Err(e) = gen_audio(text_clone, output_file_clone, &tts_voice_clone).await {
                     println!("Error generating audio {}", e);
                 } else {
                     match fs::metadata(&output_file) {
@@ -90,7 +90,7 @@ async fn read_chapter(chapter_number: usize, texts: Vec<String>, tts_voice: Stri
 
     pb.finish_with_message("All audio files generated!");
 }
-
+///Combine Sentence files to Chapter
 async fn combine_chapter(mut files: Vec<String>, output_file: &str) {
     files.sort_by_key(|file| {
         let parts: Vec<&str> = file.split('_').collect();
@@ -116,9 +116,13 @@ async fn combine_chapter(mut files: Vec<String>, output_file: &str) {
         concatenate_audio_files(files, output_file); // Ensure you await the async function
     }
 }
-
-async fn gen_audio(txt: String, output_file: String) -> Result<(), Box<dyn std::error::Error>> {
-    let voice = "en-US-BrianNeural";
+/// Fuction to easily Asyncly Generate Audio with Given setup
+async fn gen_audio(
+    txt: String,
+    output_file: String,
+    tts_voice: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let voice = tts_voice;
     let audio_data = request_audio(
         &build_ssml(&txt, voice, "medium", "medium", "medium"),
         "audio-24khz-96kbitrate-mono-mp3",
@@ -180,6 +184,7 @@ fn get_chap_files(dir: &Path) -> io::Result<Vec<String>> {
 
     Ok(files) // Return the vector of file paths
 }
+///Creates the book for modules in input styles
 async fn make_book(book_path: &str, opf_file: Option<&str>, cover: &str, tts_voice: &str) {
     let chapters = read_sections(book_path);
     let titles = get_titles(book_path);
@@ -273,9 +278,9 @@ struct Args {
     #[arg(short, long)]
     cover: Option<String>,
 
-    /// (TODO) Change the generated voice
+    /// Change the generated voice
     #[arg(short, long)]
-    voice: Option<String>, // currently unused | TODO add ability to change TTS voice used
+    voice: Option<String>, 
 
     /// Enable interactive mode
     #[arg(long, short, action)]
@@ -284,7 +289,8 @@ struct Args {
 
 const DEFAULT_OPF: &str = "none.opf";
 const DEFAULT_COVER: &str = "none.img";
-
+const DEFAULT_VOICE: &str = "en-US-BrianNeural";
+/// Handles User input 
 fn u_input(prompt: &str) -> String {
     let mut input = String::new();
     print!("{}", prompt);
@@ -350,24 +356,37 @@ async fn interactive_input() {
     } else {
         cover
     };
+    let voice = get_valid_file_path(
+        "(Optional) Choose Voice Default (en-US-BrianNeural): ",
+        true,
+    );
+    let voice = if voice.is_empty() {
+        DEFAULT_VOICE.to_string()
+    } else {
+        voice
+    };
 
     // Start Logic
     println!("file: {}, opf: {}, cover: {}", &file, &opf, &cover);
 
     if file.ends_with(".txt") {
         if opf != DEFAULT_OPF {
-            make_book(&file, Some(&opf), &cover).await;
+            make_book(&file, Some(&opf), &cover, &voice).await;
         } else {
-            make_book(&file, None, &cover).await;
+            make_book(&file, None, &cover, &voice).await;
         }
     }
 }
+
+
+
 
 async fn cli(args: Args) {
     let file_path = args.file.unwrap_or_else(|| "none.text".to_string());
     let opf_file = args.opf.unwrap_or_else(|| "none.opf".to_string()); // Use a default or handle None case
     let cover = args.cover.unwrap_or_else(|| "none.img".to_string());
     let file_exists = Path::new(&file_path).exists();
+    let voice = args.voice.unwrap_or("en-US-BrianNeural".to_string());
     println!("file: {}, opf: {}, cover: {}", file_path, opf_file, cover);
 
     if file_path.ends_with(".txt") && file_exists {
@@ -375,11 +394,11 @@ async fn cli(args: Args) {
             if cover == "none.img" {
                 println!("{}", "no cover image provided".yellow())
             }
-            make_book(&file_path, Some(&opf_file), &cover).await;
+            make_book(&file_path, Some(&opf_file), &cover, &voice).await;
         } else {
             let message = "Missing OPF file \nThis is highly Recommended as it adds Title \nYou can make this with Calibre";
             println!("{}", message.yellow());
-            make_book(&file_path, None, &cover).await;
+            make_book(&file_path, None, &cover, &voice).await;
         }
         // If opf is None, you can provide some default logic for handling
     } else if file_path.ends_with(".epub") {
@@ -408,4 +427,5 @@ async fn main() {
         cli(args).await;
     }
     fs::remove_dir_all(AUDIO_OUTPUT_DIR).ok();
+    println!("Finished All");
 }
