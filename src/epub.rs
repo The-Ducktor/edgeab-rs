@@ -13,27 +13,29 @@ pub fn make_file(input_epub: &str, output_path: &str) -> io::Result<()> {
         Ok(epub) => epub,
         Err(e) => {
             eprintln!("Failed to open EPUB file: {}", e);
-            return Err(io::Error::new(io::ErrorKind::Other, "Failed to open EPUB file"));
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Failed to open EPUB file",
+            ));
         }
     };
 
     // Creating a reader instance
     let reader = epub.reader();
 
-    // Selector for chapter elements
-    let chapter_selector = Selector::parse("h1, h2[class='chapter']").unwrap();
-
-    // Initialize variables to keep track of chapter content
-    let mut current_chapter_title = String::new();
-    let mut current_chapter_content = String::new();
-    let mut skip_chapter = false; // Flag to skip unwanted chapters and their content
+    // Selectors for chapter titles and content
+    let title_selector = Selector::parse("h1, h2, .chapter-title").unwrap();
+    let content_selector = Selector::parse("p, .chapter-content").unwrap();
 
     // Open a file to write chapter previews
     let mut output_file = match File::create(output_path) {
         Ok(file) => file,
         Err(e) => {
             eprintln!("Failed to create output file: {}", e);
-            return Err(io::Error::new(io::ErrorKind::Other, "Failed to create output file"));
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Failed to create output file",
+            ));
         }
     };
 
@@ -67,90 +69,41 @@ pub fn make_file(input_epub: &str, output_path: &str) -> io::Result<()> {
                     if media_type == "application/xhtml+xml" {
                         let html_content = content.to_string();
                         let document = Html::parse_document(&html_content);
-                        let titles = document.select(&chapter_selector);
 
-                        for title in titles {
-                            let chapter_title = title
-                                .text()
-                                .collect::<Vec<_>>()
-                                .join(" ")
-                                .trim()
-                                .to_string();
+                        // Find titles in the document
+                        let chapter_titles: Vec<String> = document
+                            .select(&title_selector)
+                            .map(|title| clean_text(&title.text().collect::<String>()))
+                            .filter(|title| !title.is_empty())
+                            .collect();
 
-                            // Clean up the chapter title by removing any '#' prefix and trimming spaces
-                            let formatted_title = chapter_title
-                                .strip_prefix('#')
-                                .unwrap_or(&chapter_title)
-                                .trim()
-                                .replace("\n", " ") // Replace line breaks with spaces in titles
-                                .to_string();
+                        // Find content for those titles
+                        let chapter_contents: Vec<String> = document
+                            .select(&content_selector)
+                            .map(|content| clean_text(&content.text().collect::<String>()))
+                            .filter(|content| !content.is_empty())
+                            .collect();
 
-                            // If we encounter a new chapter title, write out the previous one
-                            if !last_title.is_empty() && !skip_chapter {
-                                if !current_chapter_content.trim().is_empty() {
-                                    // Write previous chapter content with its title
-                                    let output = format!(
-                                        "# {}\n{}\n\n",
-                                        last_title, current_chapter_content
-                                    );
-                                    if let Err(e) = output_file.write_all(output.as_bytes()) {
-                                        eprintln!("Failed to write to output file: {}", e);
-                                        return Err(io::Error::new(io::ErrorKind::Other, "Failed to write to output file"));
-                                    }
+                        // Process each chapter if titles and contents are non-empty
+                        for (title, content) in chapter_titles.iter().zip(chapter_contents.iter()) {
+                            // Skip titles with filter phrases
+                            if !should_filter(title, &filter_phrases) {
+                                let output = format!("# {}\n{}\n\n", title, content);
+                                
+                                if let Err(e) = output_file.write_all(output.as_bytes()) {
+                                    eprintln!("Failed to write to output file: {}", e);
+                                    return Err(io::Error::new(
+                                        io::ErrorKind::Other,
+                                        "Failed to write to output file",
+                                    ));
                                 }
                             }
-
-                            // Set the flag for skipping if this chapter should be skipped
-                            skip_chapter = should_filter(&formatted_title, &filter_phrases);
-
-                            // Reset content accumulator for the new chapter
-                            last_title = formatted_title.clone(); // Use formatted title for the next chapter
-                            current_chapter_content.clear(); // Clear previous content
                         }
-
-                        // Now collect content for the chapter (without starting a new chapter yet)
-                        if !skip_chapter {
-                            let body = document.select(&Selector::parse("body").unwrap()).next();
-                            if let Some(body_element) = body {
-                                let plain_text = body_element.text().collect::<Vec<_>>().join(" ");
-
-                                // Clean the text: only remove extra whitespace and newlines, but keep formatting
-                                let cleaned_text = plain_text
-                                    .replace("\r", "")  // Remove carriage returns
-                                    .to_string();
-
-                                if !cleaned_text.is_empty() {
-                                    // Add accumulated content with appropriate formatting
-                                    current_chapter_content.push_str(&cleaned_text);
-                                    current_chapter_content.push('\n'); // Add newline for readability
-                                }
-                            } else {
-                                eprintln!("Failed to find body in content.");
-                            }
-                        }
-                    } else {
-                        eprintln!("Unexpected media type: {}", media_type);
                     }
-                } else {
-                    eprintln!("Failed to get media type for content.");
                 }
             }
             Err(e) => {
                 eprintln!("Error reading content: {}", e);
-            }
-        }
-    }
-
-    // After finishing processing all content, write the last chapter if it exists and wasn't filtered
-    if !last_title.is_empty() && !skip_chapter {
-        if !current_chapter_content.trim().is_empty() {
-            let output = format!(
-                "# {}\n{}\n\n",
-                last_title, current_chapter_content
-            );
-            if let Err(e) = output_file.write_all(output.as_bytes()) {
-                eprintln!("Failed to write to output file: {}", e);
-                return Err(io::Error::new(io::ErrorKind::Other, "Failed to write to output file"));
             }
         }
     }

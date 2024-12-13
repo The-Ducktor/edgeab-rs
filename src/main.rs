@@ -280,7 +280,7 @@ struct Args {
 
     /// Change the generated voice
     #[arg(short, long)]
-    voice: Option<String>, 
+    voice: Option<String>,
 
     /// Enable interactive mode
     #[arg(long, short, action)]
@@ -290,7 +290,7 @@ struct Args {
 const DEFAULT_OPF: &str = "none.opf";
 const DEFAULT_COVER: &str = "none.img";
 const DEFAULT_VOICE: &str = "en-US-BrianNeural";
-/// Handles User input 
+/// Handles User input
 fn u_input(prompt: &str) -> String {
     let mut input = String::new();
     print!("{}", prompt);
@@ -377,9 +377,6 @@ async fn interactive_input() {
         }
     }
 }
-
-
-
 
 async fn cli(args: Args) {
     let file_path = args.file.unwrap_or_else(|| "none.text".to_string());
